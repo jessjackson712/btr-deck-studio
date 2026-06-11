@@ -106,6 +106,19 @@ When building recommendations:
 
 Your job is not just to analyze data. Your job is to help build a marketing plan that makes the client feel both the cost of inaction and the opportunity in front of them.`;
 
+const FALLBACK_ANALYSIS = {
+  painPoints:['Low visibility vs. category competitors','Poor ROAS on Sponsored Products','No DSP or programmatic strategy'],
+  goals:['Increase market share','Improve ROAS','Launch DSP retargeting'],
+  currentStrategy:['Basic Sponsored Products with manual bidding','No external traffic or DSP','Minimal branded search defense'],
+  gaps:['No DSP, programmatic, or CTV/STV strategy','Missing mid-funnel and retargeting coverage','Competitors outspending on programmatic'],
+  keyMetrics:['Analysis could not connect to AI — using template data','Upload reports for data-backed insights'],
+  budgetTimeline:['To be confirmed in discovery call'],
+  decisionFactors:['Proven results','Transparent reporting','Dedicated team'],
+  competitiveContext:['Competitors investing in DSP and programmatic'],
+  quickWins:['Launch DSP retargeting','Restructure SP campaigns for mid-funnel coverage'],
+  summary:'Discovery analysis could not be processed automatically. Please review and edit the sections below before generating your deck, or re-run the analysis.',
+};
+
 const buildFallbackSlides = (n) => ([
   { id:'sl-1', type:'cover', title:n, headline:'Amazon Advertising Strategy Proposal', bullets:[], notes:'Set the stage.' },
   { id:'sl-2', type:'executive-summary', title:'Executive Summary', headline:'Strong brand. Under-leveraged channel. Clear path forward.', bullets:['Growth has plateaued despite meaningful ad investment','Competitors pulling ahead with programmatic strategies not yet activated','BTR Media can close the gap in 90 days'], notes:'Show you understand their business before selling anything.' },
@@ -191,7 +204,7 @@ export default function BTRDeckStudio() {
       const d = await res.json();
       setAnalysis(JSON.parse((d.content?.[0]?.text||'{}').replace(/```json|```/g,'').trim()));
       setStep(1);
-    } catch { setStep(1); }
+    } catch { setAnalysis(FALLBACK_ANALYSIS); setStep(1); }
     setAnalyzing(false);
   };
 
