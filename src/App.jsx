@@ -364,7 +364,7 @@ export default function BTRDeckStudio() {
           complete:(results) => {
             const headers = results.meta.fields || [];
             const allRows = results.data;
-            const rows = allRows.slice(0, 150);
+            const rows = allRows.slice(0, 75);
             const dataText = [`=== ${rtype.label} (${rtype.cat}) ===`,`Total rows: ${allRows.length} | Showing first ${rows.length}`,`Columns: ${headers.join(', ')}`,'---',rows.map(row => headers.map(h=>`${h}: ${row[h]??''}`).join(' | ')).join('\n')].join('\n');
             setUploadedReports(prev => ({ ...prev, [pendingRpt]:{ label:rtype.label, cat:rtype.cat, fileName:f.name, rowCount:allRows.length, headers, dataText } }));
             setPendingRpt(null); resolve();
@@ -391,7 +391,7 @@ export default function BTRDeckStudio() {
     try {
       const res = await fetch('/api/ai', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1000,
+        body:JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:4000,
           system:`${BTR_SYSTEM_PROMPT}\n\n${BTR_PLAYBOOK}\n\nAnalyze ONLY the provided data using the diagnostic criteria given for each report type. NEVER fabricate numbers. Return ONLY valid JSON.`,
           messages:[{ role:'user', content:`Analyze this Amazon advertising data for ${client?.name}.
 Discovery context: ${JSON.stringify(analysis||{})}
@@ -440,8 +440,8 @@ Return JSON:
     try {
       const res = await fetch('/api/ai', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1000,
-          system:`${BTR_SYSTEM_PROMPT}\n\n${BTR_PLAYBOOK}\n\nYou are analyzing Amazon advertising data for ${client?.name}. ONLY cite exact numbers from the uploaded reports. When citing a figure, name the source report. If asked about something not in the data, name which report would contain it. Never fabricate metrics.\n\nUPLOADED DATA:\n${reportsText}\n\nDISCOVERY CONTEXT:\n${JSON.stringify(analysis||{})}`,
+        body:JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:2000,
+          system:`${BTR_SYSTEM_PROMPT}\n\n${BTR_PLAYBOOK}\n\nYou are analyzing Amazon advertising data for ${client?.name}. ONLY cite exact numbers from the uploaded reports. When citing a figure, name the source report. If asked about something not in the data, name which report would contain it. Never fabricate metrics.\n\nREPORT ANALYSIS SUMMARY:\n${JSON.stringify(reportAnalysis||{})}\n\nRAW REPORT DATA:\n${Object.values(uploadedReports).map(r=>r.dataText.split('\n').slice(0,20).join('\n')).join('\n\n')}\n\nDISCOVERY CONTEXT:\n${JSON.stringify(analysis||{})}`,
           messages: [...chatHistory, { role:'user', content:msg }].map(m=>({ role:m.role, content:m.content }))
         })
       });
