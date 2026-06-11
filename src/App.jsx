@@ -474,6 +474,18 @@ Make content highly specific to this client's situation. Build urgency through i
 
   const Profile = () => {
     if (!client) return null;
+    const [editing, setEditing] = useState(false);
+    const [ef, setEf] = useState({ name:client.name, type:client.type, contact:client.contact||'', email:client.email||'', categories:client.categories||'', goals:client.goals||'' });
+    const [saving, setSaving] = useState(false);
+
+    const saveEdits = async () => {
+      setSaving(true);
+      const { data } = await supabase.from('clients').update(ef).eq('id', selId).select().single();
+      if (data) setClients(prev => prev.map(c => c.id===selId ? { ...data, sessions:c.sessions } : c));
+      setSaving(false);
+      setEditing(false);
+    };
+
     return (
       <div>
         <button style={{ ...btn('outline'), marginBottom:18 }} onClick={()=>setScreen('clients')}>← All Clients</button>
@@ -482,21 +494,56 @@ Make content highly specific to this client's situation. Build urgency through i
             <div style={st.card}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:14 }}>
                 <div>
-                  <div style={{ fontSize:22, fontWeight:800 }}>{client.name}</div>
+                  {editing
+                    ? <input style={{ ...st.input, fontSize:20, fontWeight:800, marginBottom:8 }} value={ef.name} onChange={e=>setEf(p=>({...p,name:e.target.value}))} />
+                    : <div style={{ fontSize:22, fontWeight:800 }}>{client.name}</div>
+                  }
                   <div style={{ marginTop:6, display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-                    <span style={badge(client.type)}>{client.type==='prospect'?'Prospect':'Active Client'}</span>
-                    <span style={{ fontSize:12, color:C.faint }}>👤 {client.contact}</span>
+                    {editing
+                      ? <select style={{ ...st.input, width:'auto', fontSize:12 }} value={ef.type} onChange={e=>setEf(p=>({...p,type:e.target.value}))}>
+                          <option value="prospect">Prospect</option>
+                          <option value="active">Active Client</option>
+                        </select>
+                      : <span style={badge(client.type)}>{client.type==='prospect'?'Prospect':'Active Client'}</span>
+                    }
+                    {!editing && <span style={{ fontSize:12, color:C.faint }}>👤 {client.contact}</span>}
                   </div>
                 </div>
+                <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+                  {editing ? (
+                    <>
+                      <button style={{ ...btn('primary'), opacity:saving?0.5:1 }} onClick={saveEdits} disabled={saving}>{saving?'Saving…':'Save'}</button>
+                      <button style={btn('ghost')} onClick={()=>{ setEditing(false); setEf({ name:client.name, type:client.type, contact:client.contact||'', email:client.email||'', categories:client.categories||'', goals:client.goals||'' }); }}>Cancel</button>
+                    </>
+                  ) : (
+                    <button style={btn('ghost')} onClick={()=>setEditing(true)}>✏️ Edit</button>
+                  )}
+                </div>
               </div>
-              <div style={{ background:C.surface, borderRadius:8, padding:'10px 14px', marginBottom:12 }}>
-                <div style={st.label}>Amazon Categories</div>
-                <div style={{ fontSize:13, color:C.text }}>{client.categories||'—'}</div>
-              </div>
-              <div style={{ background:C.surface, borderRadius:8, padding:'10px 14px' }}>
-                <div style={st.label}>Client Goals</div>
-                <div style={{ fontSize:13, color:C.text, lineHeight:1.6 }}>{client.goals||'No goals set.'}</div>
-              </div>
+
+              {editing ? (
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                  <div><label style={st.label}>Contact</label><input style={st.input} value={ef.contact} onChange={e=>setEf(p=>({...p,contact:e.target.value}))} placeholder="Name" /></div>
+                  <div><label style={st.label}>Email</label><input style={st.input} value={ef.email} onChange={e=>setEf(p=>({...p,email:e.target.value}))} placeholder="email@brand.com" /></div>
+                  <div style={{ gridColumn:'1/-1' }}><label style={st.label}>Amazon Categories</label><input style={st.input} value={ef.categories} onChange={e=>setEf(p=>({...p,categories:e.target.value}))} placeholder="Health, Beauty…" /></div>
+                  <div style={{ gridColumn:'1/-1' }}><label style={st.label}>Client Goals</label><textarea style={{ ...st.textarea, minHeight:100 }} value={ef.goals} onChange={e=>setEf(p=>({...p,goals:e.target.value}))} placeholder="What are they trying to achieve on Amazon?" /></div>
+                </div>
+              ) : (
+                <>
+                  <div style={{ background:C.surface, borderRadius:8, padding:'10px 14px', marginBottom:12 }}>
+                    <div style={st.label}>Contact & Email</div>
+                    <div style={{ fontSize:13, color:C.text }}>👤 {client.contact||'—'}{client.email ? ` · ${client.email}` : ''}</div>
+                  </div>
+                  <div style={{ background:C.surface, borderRadius:8, padding:'10px 14px', marginBottom:12 }}>
+                    <div style={st.label}>Amazon Categories</div>
+                    <div style={{ fontSize:13, color:C.text }}>{client.categories||'—'}</div>
+                  </div>
+                  <div style={{ background:C.surface, borderRadius:8, padding:'10px 14px' }}>
+                    <div style={st.label}>Client Goals</div>
+                    <div style={{ fontSize:13, color:C.text, lineHeight:1.6 }}>{client.goals||'No goals set.'}</div>
+                  </div>
+                </>
+              )}
             </div>
             <div style={{ ...st.card, marginTop:16 }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
