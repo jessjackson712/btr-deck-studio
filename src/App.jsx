@@ -46,17 +46,24 @@ const REPORT_TYPES = [
   { id:'sp_placement', label:'SP Placement Report', cat:'Sponsored Products' },
   { id:'sp_advertised', label:'SP Advertised Product', cat:'Sponsored Products' },
   { id:'sp_search_term', label:'SP Search Term Report', cat:'Sponsored Products' },
+  { id:'sqr', label:'SQR (Search Query Report)', cat:'Sponsored Products' },
   { id:'beta_product', label:'Beta Report by Product', cat:'DSP / Beta' },
   { id:'beta_target', label:'Beta Report by Target', cat:'DSP / Beta' },
   { id:'beta_campaign', label:'Beta Report by Campaign', cat:'DSP / Beta' },
   { id:'sc_sales_asin', label:'SC Total Sales by ASIN', cat:'Seller Central' },
+  { id:'q1_last_year', label:'Q1 Last Year', cat:'Period Reports' },
+  { id:'q1_this_year', label:'Q1 This Year', cat:'Period Reports' },
   { id:'ss_search', label:'SmartScout: Search Terms', cat:'SmartScout' },
   { id:'ss_market', label:'SmartScout: Market Share', cat:'SmartScout' },
   { id:'ss_products', label:'SmartScout: Products', cat:'SmartScout' },
   { id:'ss_brand', label:'SmartScout: Brand Monthly', cat:'SmartScout' },
+  { id:'amc_impression_freq', label:'AMC: Impression Frequency', cat:'AMC' },
+  { id:'amc_kw_purchase_path', label:'AMC: Sponsored Ads Keyword Purchase Path', cat:'AMC' },
+  { id:'amc_ad_placement', label:'AMC: Effectiveness of Ad Placements', cat:'AMC' },
+  { id:'amc_time_to_conversion', label:'AMC: Time to Conversion On-Amazon', cat:'AMC' },
 ];
 
-const CAT_COLORS = { 'Sponsored Brands':'#3B82F6','Sponsored Products':'#8B5CF6','DSP / Beta':'#F97316','Seller Central':'#10B981','SmartScout':'#F59E0B' };
+const CAT_COLORS = { 'Sponsored Brands':'#3B82F6','Sponsored Products':'#8B5CF6','DSP / Beta':'#F97316','Seller Central':'#10B981','Period Reports':'#84CC16','SmartScout':'#F59E0B','AMC':'#EC4899' };
 
 const DEMO_CLIENTS = [
   { id:'d1', name:'NovaBrand Nutrition', type:'prospect', contact:'Sarah Chen', email:'sarah@novabrand.com', categories:'Health & Wellness, Sports Nutrition', goals:'Break top 3 in protein powder, improve ROAS to 4x', sessions:[], createdAt:'2026-05-01' },
