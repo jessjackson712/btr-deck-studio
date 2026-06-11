@@ -2,6 +2,12 @@ import { useState, useRef, useEffect } from "react";
 import * as mammoth from "mammoth";
 import Papa from "papaparse";
 import PptxGenJS from "pptxgenjs";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
 
 const C = {
   bg:'#0B1120', surface:'#111827', card:'#1F2937', border:'#374151',
@@ -65,23 +71,40 @@ const REPORT_TYPES = [
 
 const CAT_COLORS = { 'Sponsored Brands':'#3B82F6','Sponsored Products':'#8B5CF6','DSP / Beta':'#F97316','Seller Central':'#10B981','Period Reports':'#84CC16','SmartScout':'#F59E0B','AMC':'#EC4899' };
 
-const DEMO_CLIENTS = [
-  { id:'d1', name:'NovaBrand Nutrition', type:'prospect', contact:'Sarah Chen', email:'sarah@novabrand.com', categories:'Health & Wellness, Sports Nutrition', goals:'Break top 3 in protein powder, improve ROAS to 4x', sessions:[], createdAt:'2026-05-01' },
-  { id:'d2', name:'PureHome Essentials', type:'active', contact:'Marcus Webb', email:'marcus@purehome.com', categories:'Home & Garden, Cleaning', goals:'Grow Amazon revenue 40% YoY, expand to 3 new subcategories', sessions:[{ id:'s1', type:'monthly', date:'2026-05-01', title:'May 2026 Performance Review', slideCount:7 }], createdAt:'2025-09-01' },
-];
+const BTR_SYSTEM_PROMPT = `You are acting as a senior retail media strategist at BTR Media, a performance marketing agency specializing in Amazon advertising including DSP, Sponsored Ads, CTV/STV, and creative strategy.
 
-const FALLBACK_ANALYSIS = {
-  painPoints:['Low visibility vs. category competitors','Poor ROAS on Sponsored Products (~2.1x)','No DSP or programmatic strategy'],
-  goals:['Increase market share by 25%','Achieve 4x ROAS within 6 months','Launch DSP retargeting'],
-  currentStrategy:['Basic Sponsored Products with manual bidding','No external traffic or DSP','Minimal branded search defense'],
-  gaps:['No DSP, programmatic, or CTV/STV strategy','Missing mid-funnel and retargeting coverage','Competitors outspending on programmatic'],
-  keyMetrics:['ROAS: ~2.1x','Monthly ad spend: ~$15K','Category rank: top 10, flat'],
-  budgetTimeline:['Ready to scale to $30K+/month','Decision in next 30 days'],
-  decisionFactors:['Proven results in category','Transparent reporting','No long-term contracts'],
-  competitiveContext:['3 main competitors dominate DSP impressions'],
-  quickWins:['Launch DSP retargeting — product page visitors not being recaptured','Restructure SP campaigns for mid-funnel coverage'],
-  summary:'A growth-stage brand with real budget and urgency, stalled by a strategy that stopped evolving. They have the goals, the spend, and the desire to win — they need a partner with programmatic depth.',
-};
+Your job is to analyze everything thoroughly and help build a full audit and marketing plan for the brand. When reviewing data:
+- Identify growth opportunities
+- Find inefficiencies, wasted spend, structural issues, and strategic gaps
+- Look for areas where competitors are outperforming the brand
+- Highlight missed opportunities in Amazon Search, DSP, AMC, Walmart, audience strategy, creative strategy, placements, keyword coverage, conquesting, NTB acquisition, and full-funnel execution
+- Look for disconnects between the brand's stated goals and what the data actually shows
+- Use the discovery call transcript to understand: brand priorities, pain points, internal frustrations, revenue goals, team dynamics, risk tolerance, current strategy limitations
+
+Do not just summarize data. Build a narrative. The goal is to create an audit and marketing plan that makes the brand clearly understand:
+- What they are missing
+- Why current strategies are limiting growth
+- What opportunities competitors are taking advantage of
+- The financial impact of staying where they are
+- What becomes possible with BTR Media's approach
+
+The audit should create urgency without sounding overly salesy. It should feel strategic, data-backed, and highly customized to the brand.
+
+CRITICAL RULES:
+- Never invent numbers or performance data
+- If information is missing, say so explicitly and name which report would contain it
+- Prioritize insights over fluff
+- Think like a consultant, not a generic AI assistant
+- Tie findings back to business impact whenever possible
+- Focus heavily on storytelling, positioning, and strategic clarity
+
+When building recommendations:
+- Prioritize by impact
+- Explain the "why" behind each recommendation
+- Show how tactics connect together across the funnel
+- Make recommendations feel actionable and realistic
+
+Your job is not just to analyze data. Your job is to help build a marketing plan that makes the client feel both the cost of inaction and the opportunity in front of them.`;
 
 const buildFallbackSlides = (n) => ([
   { id:'sl-1', type:'cover', title:n, headline:'Amazon Advertising Strategy Proposal', bullets:[], notes:'Set the stage.' },
@@ -108,7 +131,8 @@ const buildFallbackMonthly = (n) => ([
 
 export default function BTRDeckStudio() {
   const [screen, setScreen] = useState('clients');
-  const [clients, setClients] = useState(DEMO_CLIENTS);
+  const [clients, setClients] = useState([]);
+  const [loadingClients, setLoadingClients] = useState(true);
   const [selId, setSelId] = useState(null);
   const [sessionType, setSessionType] = useState('discovery');
   const [step, setStep] = useState(0);
@@ -127,11 +151,23 @@ export default function BTRDeckStudio() {
   const [slides, setSlides] = useState([]);
   const [editId, setEditId] = useState(null);
   const [exporting, setExporting] = useState(false);
+  const [savingSession, setSavingSession] = useState(false);
   const transcriptRef = useRef(null);
   const reportFileRef = useRef(null);
   const chatEndRef = useRef(null);
 
+  useEffect(() => { loadClients(); }, []);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior:'smooth' }); }, [chatHistory]);
+
+  const loadClients = async () => {
+    setLoadingClients(true);
+    const { data } = await supabase
+      .from('clients')
+      .select('*, sessions(*)')
+      .order('created_at', { ascending: false });
+    if (data) setClients(data.map(c => ({ ...c, sessions: (c.sessions||[]).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)) })));
+    setLoadingClients(false);
+  };
 
   const client = clients.find(c => c.id === selId);
 
@@ -148,14 +184,14 @@ export default function BTRDeckStudio() {
       const res = await fetch('/api/ai', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1000,
-          system:`You are a senior Amazon advertising strategist at BTR Media. Analyze discovery call transcripts for sales intelligence. Return ONLY valid JSON, no markdown.`,
+          system:`${BTR_SYSTEM_PROMPT}\n\nAnalyze discovery call transcripts for sales intelligence. Return ONLY valid JSON, no markdown.`,
           messages:[{ role:'user', content:`Analyze this transcript for ${client?.name}. Return JSON with: painPoints, goals, currentStrategy, gaps, keyMetrics, budgetTimeline, decisionFactors, competitiveContext, quickWins (each an array of strings), and summary (2-3 sentences).\n\nTRANSCRIPT:\n${transcript}` }]
         })
       });
       const d = await res.json();
       setAnalysis(JSON.parse((d.content?.[0]?.text||'{}').replace(/```json|```/g,'').trim()));
       setStep(1);
-    } catch { setAnalysis(FALLBACK_ANALYSIS); setStep(1); }
+    } catch { setStep(1); }
     setAnalyzing(false);
   };
 
@@ -173,16 +209,9 @@ export default function BTRDeckStudio() {
             const headers = results.meta.fields || [];
             const allRows = results.data;
             const rows = allRows.slice(0, 150);
-            const dataText = [
-              `=== ${rtype.label} (${rtype.cat}) ===`,
-              `Total rows: ${allRows.length} | Showing first ${rows.length}`,
-              `Columns: ${headers.join(', ')}`,
-              '---',
-              rows.map(row => headers.map(h=>`${h}: ${row[h]??''}`).join(' | ')).join('\n')
-            ].join('\n');
+            const dataText = [`=== ${rtype.label} (${rtype.cat}) ===`,`Total rows: ${allRows.length} | Showing first ${rows.length}`,`Columns: ${headers.join(', ')}`,'---',rows.map(row => headers.map(h=>`${h}: ${row[h]??''}`).join(' | ')).join('\n')].join('\n');
             setUploadedReports(prev => ({ ...prev, [pendingRpt]:{ label:rtype.label, cat:rtype.cat, fileName:f.name, rowCount:allRows.length, headers, dataText } }));
-            setPendingRpt(null);
-            resolve();
+            setPendingRpt(null); resolve();
           },
           error: () => { setPendingRpt(null); resolve(); }
         });
@@ -201,7 +230,7 @@ export default function BTRDeckStudio() {
       const res = await fetch('/api/ai', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1000,
-          system:`You are a data analyst at BTR Media. Analyze ONLY the provided data. NEVER fabricate numbers. If a metric is not in the data, say "not available in uploaded reports." Return ONLY valid JSON.`,
+          system:`${BTR_SYSTEM_PROMPT}\n\nAnalyze ONLY the provided data. NEVER fabricate numbers. If a metric is not in the data, say "not available in uploaded reports." Return ONLY valid JSON.`,
           messages:[{ role:'user', content:`Analyze this Amazon advertising data for ${client?.name}. Discovery context: ${JSON.stringify(analysis||{})}.
 
 REPORTS:
@@ -223,10 +252,8 @@ Return JSON:
       const d = await res.json();
       const parsed = JSON.parse((d.content?.[0]?.text||'{}').replace(/```json|```/g,'').trim());
       setReportAnalysis(parsed);
-      setChatHistory([{ role:'assistant', content:`I have analyzed ${entries.length} report${entries.length>1?'s':''} from ${client?.name}'s account: ${entries.map(([,r])=>r.label).join(', ')}.\n\nI can answer specific questions about the data. What would you like to know?` }]);
-    } catch {
-      setReportAnalysis({ uploadedReports:entries.map(([,r])=>r.label), keyMetrics:[], strengthsFound:[], gapsFound:[], opportunities:[], competitiveInsights:[], recommendedFocus:[], dataLimitations:['Analysis error — please re-run'] });
-    }
+      setChatHistory([{ role:'assistant', content:`I have analyzed ${entries.length} report${entries.length>1?'s':''} from ${client?.name}'s account: ${entries.map(([,r])=>r.label).join(', ')}.\n\nWhat would you like to know about the data?` }]);
+    } catch { setAnalyzingReports(false); }
     setAnalyzingReports(false);
   };
 
@@ -242,14 +269,15 @@ Return JSON:
       const res = await fetch('/api/ai', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1000,
-          system:`You are a data analyst at BTR Media analyzing Amazon advertising data for ${client?.name}.
+          system:`${BTR_SYSTEM_PROMPT}
 
-CRITICAL RULES:
-1. ONLY cite exact numbers and data that appear in the uploaded reports below
-2. When citing a figure, always name the source report
-3. If asked about something not in the data, say exactly which report would contain that info and that it has not been uploaded
-4. Never estimate, project, or fabricate any metric
-5. Be concise and specific
+You are analyzing Amazon advertising data for ${client?.name}.
+
+ADDITIONAL CRITICAL RULES FOR THIS CHAT:
+- ONLY cite exact numbers and data that appear in the uploaded reports below
+- When citing a figure, always name the source report
+- If asked about something not in the data, name which report would contain that info
+- Never estimate, project, or fabricate any metric
 
 UPLOADED REPORT DATA:
 ${reportsText}
@@ -275,15 +303,15 @@ ${JSON.stringify(analysis||{})}`,
       const res = await fetch('/api/ai', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1000,
-          system:`You are a senior Amazon advertising strategist at BTR Media. Generate compelling, specific slide content. Return ONLY a valid JSON array, no markdown.`,
+          system:`${BTR_SYSTEM_PROMPT}\n\nGenerate compelling, specific slide content. Return ONLY a valid JSON array, no markdown.`,
           messages:[{ role:'user', content:`Generate a ${isProspect?'sales pitch':sessionType+' review'} deck for ${client?.name}.
 Type: ${client?.type} | Goals: ${client?.goals}
 Discovery Analysis: ${JSON.stringify(analysis)}
-${hasReportData?`Report Analysis: ${JSON.stringify(reportAnalysis)}\nIMPORTANT: When including specific metrics or numbers in slides, ONLY use figures that appear in the report analysis above. Do not fabricate numbers.`:'No report data uploaded — do not include specific metrics.'}
+${hasReportData?`Report Analysis: ${JSON.stringify(reportAnalysis)}\nIMPORTANT: ONLY use figures that appear in the report analysis. Do not fabricate numbers.`:'No report data uploaded — use qualitative language only, no placeholder numbers.'}
 
 Return JSON array. Each slide: { id, type, title, headline, bullets (array of strings), notes }.
 ${isProspect?'Slides: cover, executive-summary, current-state, gap-analysis, solution, dsp-strategy, ctv-strategy, timeline, investment, next-steps':'Slides: cover, month-in-review, kpi-performance, whats-working, needs-attention, strategy, next-steps'}
-Make content specific to this client. If no report data, use qualitative language only — no placeholder numbers.` }]
+Make content highly specific to this client's situation. Build urgency through insight, not pressure.` }]
         })
       });
       const d = await res.json();
@@ -335,9 +363,22 @@ Make content specific to this client. If no report data, use qualitative languag
   const addBullet = (sid) => setSlides(p=>p.map(s=>s.id===sid?{...s,bullets:[...(s.bullets||[]),'New point']}:s));
   const removeBullet = (sid,bi) => setSlides(p=>p.map(s=>{ if(s.id!==sid) return s; const b=[...(s.bullets||[])]; b.splice(bi,1); return {...s,bullets:b}; }));
 
-  const saveAndAdvance = () => {
-    const sess = { id:`s${Date.now()}`, type:sessionType, date:new Date().toISOString(), title:slides[0]?.headline||`${client?.name} Deck`, slideCount:slides.length };
-    setClients(p=>p.map(c=>c.id===selId?{...c,sessions:[sess,...c.sessions]}:c));
+  const saveAndAdvance = async () => {
+    setSavingSession(true);
+    const sessionData = {
+      client_id: selId,
+      type: sessionType,
+      title: slides[0]?.headline || `${client?.name} Deck`,
+      slide_count: slides.length,
+      slides_json: slides,
+      analysis_json: analysis,
+      report_analysis_json: reportAnalysis,
+    };
+    const { data } = await supabase.from('sessions').insert([sessionData]).select().single();
+    if (data) {
+      setClients(prev => prev.map(c => c.id===selId ? { ...c, sessions:[data,...(c.sessions||[])] } : c));
+    }
+    setSavingSession(false);
     setStep(4);
   };
 
@@ -364,37 +405,50 @@ Make content specific to this client. If no report data, use qualitative languag
   const Clients = () => (
     <div>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:24 }}>
-        <div style={{ fontSize:13, color:C.muted }}>{clients.length} clients · {clients.filter(c=>c.type==='prospect').length} prospects · {clients.filter(c=>c.type==='active').length} active</div>
+        <div style={{ fontSize:13, color:C.muted }}>
+          {loadingClients ? 'Loading...' : `${clients.length} clients · ${clients.filter(c=>c.type==='prospect').length} prospects · ${clients.filter(c=>c.type==='active').length} active`}
+        </div>
         <button style={btn('primary')} onClick={()=>setScreen('new-client')}>+ New Client</button>
       </div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(265px,1fr))', gap:16 }}>
-        {clients.map(c=>(
-          <div key={c.id} style={{ ...st.card, cursor:'pointer' }} onClick={()=>{ setSelId(c.id); setScreen('profile'); }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:10 }}>
-              <div style={{ fontSize:15, fontWeight:700, flex:1, marginRight:8 }}>{c.name}</div>
-              <span style={badge(c.type)}>{c.type==='prospect'?'Prospect':'Active'}</span>
+      {loadingClients ? (
+        <div style={{ textAlign:'center', padding:'60px 0', color:C.faint }}>Loading clients…</div>
+      ) : (
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(265px,1fr))', gap:16 }}>
+          {clients.map(c=>(
+            <div key={c.id} style={{ ...st.card, cursor:'pointer' }} onClick={()=>{ setSelId(c.id); setScreen('profile'); }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:10 }}>
+                <div style={{ fontSize:15, fontWeight:700, flex:1, marginRight:8 }}>{c.name}</div>
+                <span style={badge(c.type)}>{c.type==='prospect'?'Prospect':'Active'}</span>
+              </div>
+              <div style={{ fontSize:13, color:C.muted, marginBottom:6 }}>👤 {c.contact}</div>
+              <div style={{ fontSize:12, color:C.faint, marginBottom:14, lineHeight:1.5 }}>{c.categories}</div>
+              <div style={{ borderTop:`1px solid ${C.border}`, paddingTop:12, display:'flex', justifyContent:'space-between', fontSize:12 }}>
+                <span style={{ color:C.faint }}>🗂 {(c.sessions||[]).length} deck{(c.sessions||[]).length!==1?'s':''}</span>
+                <span style={{ color:C.accent, fontWeight:600 }}>Open →</span>
+              </div>
             </div>
-            <div style={{ fontSize:13, color:C.muted, marginBottom:6 }}>👤 {c.contact}</div>
-            <div style={{ fontSize:12, color:C.faint, marginBottom:14, lineHeight:1.5 }}>{c.categories}</div>
-            <div style={{ borderTop:`1px solid ${C.border}`, paddingTop:12, display:'flex', justifyContent:'space-between', fontSize:12 }}>
-              <span style={{ color:C.faint }}>🗂 {c.sessions.length} deck{c.sessions.length!==1?'s':''}</span>
-              <span style={{ color:C.accent, fontWeight:600 }}>Open →</span>
-            </div>
+          ))}
+          <div style={{ ...st.card, border:`1px dashed ${C.border}`, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8, color:C.faint, fontSize:14, minHeight:150 }} onClick={()=>setScreen('new-client')}>
+            <span style={{ fontSize:22 }}>＋</span> New Client
           </div>
-        ))}
-        <div style={{ ...st.card, border:`1px dashed ${C.border}`, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8, color:C.faint, fontSize:14, minHeight:150 }} onClick={()=>setScreen('new-client')}>
-          <span style={{ fontSize:22 }}>＋</span> New Client
         </div>
-      </div>
+      )}
     </div>
   );
 
   const NewClient = () => {
     const [f,setF] = useState({ name:'', type:'prospect', contact:'', email:'', categories:'', goals:'' });
-    const save = () => {
+    const [saving, setSaving] = useState(false);
+    const save = async () => {
       if (!f.name.trim()) return;
-      const nc={...f,id:`c${Date.now()}`,sessions:[],createdAt:new Date().toISOString()};
-      setClients(p=>[...p,nc]); setSelId(nc.id); setScreen('profile');
+      setSaving(true);
+      const { data } = await supabase.from('clients').insert([f]).select().single();
+      if (data) {
+        setClients(prev => [{ ...data, sessions:[] }, ...prev]);
+        setSelId(data.id);
+        setScreen('profile');
+      }
+      setSaving(false);
     };
     return (
       <div style={{ maxWidth:580 }}>
@@ -410,7 +464,7 @@ Make content specific to this client. If no report data, use qualitative languag
             <div style={{ gridColumn:'1/-1' }}><label style={st.label}>Goals</label><textarea style={{ ...st.textarea, minHeight:80 }} value={f.goals} onChange={e=>setF(p=>({...p,goals:e.target.value}))} placeholder="What are they trying to achieve on Amazon?" /></div>
           </div>
           <div style={{ display:'flex', gap:10, marginTop:18 }}>
-            <button style={{ ...btn('primary'), opacity:f.name?1:0.5 }} onClick={save} disabled={!f.name}>Create Profile</button>
+            <button style={{ ...btn('primary'), opacity:(!f.name||saving)?0.5:1 }} onClick={save} disabled={!f.name||saving}>{saving?'Saving…':'Create Profile'}</button>
             <button style={btn('ghost')} onClick={()=>setScreen('clients')}>Cancel</button>
           </div>
         </div>
@@ -447,15 +501,15 @@ Make content specific to this client. If no report data, use qualitative languag
             <div style={{ ...st.card, marginTop:16 }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
                 <div style={{ fontSize:15, fontWeight:700 }}>Deck History</div>
-                <span style={{ fontSize:12, color:C.faint }}>{client.sessions.length} total</span>
+                <span style={{ fontSize:12, color:C.faint }}>{(client.sessions||[]).length} total</span>
               </div>
-              {!client.sessions.length
+              {!(client.sessions||[]).length
                 ? <div style={{ textAlign:'center', padding:'20px 0', color:C.faint, fontSize:13 }}>No decks yet. Build your first one.</div>
-                : client.sessions.map(s=>(
+                : (client.sessions||[]).map(s=>(
                   <div key={s.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'11px 0', borderBottom:`1px solid ${C.border}` }}>
                     <div>
                       <div style={{ fontSize:14, fontWeight:600 }}>{s.title}</div>
-                      <div style={{ fontSize:12, color:C.faint, marginTop:2 }}>{new Date(s.date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})} · {s.slideCount} slides</div>
+                      <div style={{ fontSize:12, color:C.faint, marginTop:2 }}>{new Date(s.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})} · {s.slide_count} slides</div>
                     </div>
                     <span style={{ fontSize:11, padding:'3px 9px', borderRadius:20, background:'#374151', color:C.muted }}>{s.type}</span>
                   </div>
@@ -473,7 +527,7 @@ Make content specific to this client. If no report data, use qualitative languag
                   <button style={{ ...btn('ghost'), width:'100%' }} onClick={()=>startSession('annual')}>🏆 Annual Recap</button>
                 </>)
             }
-            <div style={{ marginTop:14, padding:12, background:C.surface, borderRadius:8, fontSize:12, color:C.faint, lineHeight:1.6 }}>Each session saves to deck history to track progress over time.</div>
+            <div style={{ marginTop:14, padding:12, background:C.surface, borderRadius:8, fontSize:12, color:C.faint, lineHeight:1.6 }}>Each session saves to deck history so you can track progress and learn from past builds.</div>
           </div>
         </div>
       </div>
@@ -540,7 +594,7 @@ Make content specific to this client. If no report data, use qualitative languag
           </div>
           <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0 }}>
             {uploadedCount>0 && <span style={{ fontSize:12, color:C.success, fontWeight:600 }}>✓ {uploadedCount} uploaded</span>}
-            <button style={{ ...btn('ghost'), fontSize:12 }} onClick={()=>{ doGenerate(); }}>Skip → Build Deck</button>
+            <button style={{ ...btn('ghost'), fontSize:12 }} onClick={doGenerate}>Skip → Build Deck</button>
           </div>
         </div>
         <input ref={reportFileRef} type="file" accept=".csv,.txt,.tsv" style={{ display:'none' }} onChange={handleReportFile} />
@@ -659,7 +713,9 @@ Make content specific to this client. If no report data, use qualitative languag
           <div style={{ fontSize:13, color:C.muted }}>{slides.length} slides · click any slide to edit</div>
           <div style={{ display:'flex', gap:10 }}>
             <button style={btn('ghost')} onClick={()=>setStep(2)}>← Reports</button>
-            <button style={btn('primary')} onClick={saveAndAdvance}>Export Deck →</button>
+            <button style={{ ...btn('primary'), opacity:savingSession?0.5:1 }} onClick={saveAndAdvance} disabled={savingSession}>
+              {savingSession?'Saving…':'Save & Export →'}
+            </button>
           </div>
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))', gap:14 }}>
@@ -708,8 +764,8 @@ Make content specific to this client. If no report data, use qualitative languag
         <div style={st.card}>
           <div style={{ textAlign:'center', padding:'10px 0 20px' }}>
             <div style={{ fontSize:44, marginBottom:10 }}>🎉</div>
-            <div style={{ fontSize:20, fontWeight:800, marginBottom:6 }}>Deck Ready</div>
-            <div style={{ fontSize:14, color:C.muted, marginBottom:22 }}>{slides.length} slides · saved to {client?.name}'s history</div>
+            <div style={{ fontSize:20, fontWeight:800, marginBottom:6 }}>Deck Saved</div>
+            <div style={{ fontSize:14, color:C.muted, marginBottom:22 }}>{slides.length} slides · saved to {client?.name}'s history in Supabase</div>
             <button style={{ ...btn('primary'), width:'100%', padding:'13px 20px', fontSize:15, marginBottom:10 }} onClick={exportPPTX} disabled={exporting}>
               {exporting?'⏳ Exporting…':'⬇️ Download PowerPoint (.pptx)'}
             </button>
@@ -759,7 +815,7 @@ Make content specific to this client. If no report data, use qualitative languag
         <div style={{ padding:'12px 10px', flex:1 }}>
           {navItems.map(it=><div key={it.id} style={navItem(screen===it.id)} onClick={()=>setScreen(it.id)}><span>{it.icon}</span><span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{it.label}</span></div>)}
         </div>
-        <div style={{ padding:'14px 20px', borderTop:'1px solid #1F2937', fontSize:11, color:'#374151' }}>v1.0 · Phase 1</div>
+        <div style={{ padding:'14px 20px', borderTop:'1px solid #1F2937', fontSize:11, color:'#374151' }}>v2.0 · Supabase</div>
       </div>
       <div style={st.main}>
         <div style={st.header}>
