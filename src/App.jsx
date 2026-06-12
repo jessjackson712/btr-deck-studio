@@ -118,16 +118,7 @@ When building recommendations:
 
 Your job is not just to analyze data. Your job is to help build a marketing plan that makes the client feel the cost of inaction and the opportunity in front of them.`;
 
-const BTR_PLAYBOOK = `
-BTR MEDIA STRATEGY PLAYBOOK:
-Low Conversion Rate on SP → Isolate highest-converting search terms into single-keyword, single-ASIN ranking campaigns. Prioritize Top of Search placement on proven converting terms.
-High TACoS with Flat/Declining Revenue → Rebuild upper-funnel visibility and defend core keyword positions. Declining impression share signals weakening organic rank.
-Low New-to-Brand % → Expand reach through SB, SBV, DSP, and prospecting audiences to introduce the brand earlier in the purchase journey.
-Poor Share of Voice → Shift to exact-match ranking campaigns on highest-value search terms. Own premium placements that drive both conversions and organic rank growth.
-No Mid-Funnel Coverage → Increase SB, SBV, and audience-based campaigns to keep the brand visible while shoppers evaluate options.
-High Impression Frequency with Low Purchase Rate (AMC) → Build sequential remarketing through DSP and Sponsored Ads.
-Long Time-to-Conversion (AMC) → Align attribution windows, remarketing durations, and messaging with the brand's actual purchase cycle.
-Competitors Conquesting Your ASINs → Protect core branded searches while actively conquesting competitor traffic for NTB acquisition.`;
+
 
 const REPORT_DIAGNOSTICS = {
   sp_search_term:`SP SEARCH TERM — look for: high spend/low CVR (<5%) terms, strong ROAS terms with low impression share, branded terms in broad/auto, single term driving >30% of spend, zero-order terms for negation.`,
@@ -354,7 +345,7 @@ Output a concise but thorough style guide (400-600 words) that will help an AI r
       const res = await fetch('/api/ai', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:4000,
-          system:`${BTR_SYSTEM_PROMPT}\n\n${BTR_PLAYBOOK}\n\nAnalyze ONLY provided data using the diagnostic criteria for each report type. NEVER fabricate numbers. Return ONLY valid JSON.`,
+          system:`${BTR_SYSTEM_PROMPT}\n\nAnalyze ONLY provided data using the diagnostic criteria for each report type. NEVER fabricate numbers. Return ONLY valid JSON.`,
           messages:[{ role:'user', content:`Analyze this data for ${client?.name}.\nDiscovery: ${JSON.stringify(analysis||{})}\n\n${diagnosticContext}\n\nReturn JSON:\n{\n"uploadedReports":["list"],\n"keyMetrics":[{"metric":"","value":"","source":"","context":""}],\n"strengthsFound":["specific with figure+source"],\n"gapsFound":["specific with figure+source"],\n"opportunities":["data-backed with source"],\n"competitiveInsights":["or state not available"],\n"strategicRecommendations":[{"problem":"","evidence":"","btrStrategy":"","priority":"high|medium|low","deckSlide":""}],\n"dataLimitations":["missing reports"]\n}` }]
         })
       });
@@ -380,7 +371,7 @@ Output a concise but thorough style guide (400-600 words) that will help an AI r
       const res = await fetch('/api/ai', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:2000,
-          system:`${BTR_SYSTEM_PROMPT}\n\n${BTR_PLAYBOOK}\n\nAnalyzing data for ${client?.name}. ONLY cite exact numbers from uploaded reports. Name source when citing. Never fabricate.\n\nREPORT SUMMARY:\n${JSON.stringify(reportAnalysis||{})}\n\nRAW SAMPLE:\n${reportsText}\n\nDISCOVERY:\n${JSON.stringify(analysis||{})}`,
+          system:`${BTR_SYSTEM_PROMPT}\n\nAnalyzing data for ${client?.name}. ONLY cite exact numbers from uploaded reports. Name source when citing. Never fabricate.\n\nREPORT SUMMARY:\n${JSON.stringify(reportAnalysis||{})}\n\nRAW SAMPLE:\n${reportsText}\n\nDISCOVERY:\n${JSON.stringify(analysis||{})}`,
           messages:[...chatHistory,{ role:'user', content:msg }].map(m=>({ role:m.role, content:m.content }))
         })
       });
