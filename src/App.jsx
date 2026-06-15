@@ -749,12 +749,19 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
       const ext = file.name.split('.').pop();
       const storagePath = `${selId}/reports/${reportId}.${ext}`;
       const { error: storageErr } = await supabase.storage.from('client-files').upload(storagePath, file, { upsert:true });
-      if (storageErr) { console.error(storageErr); return null; }
-      const { data } = await supabase.from('reports').insert([{
+      if (storageErr) {
+        console.error('Storage error:', storageErr);
+        throw new Error(`Storage: ${storageErr.message}`);
+      }
+      const { data, error: dbErr } = await supabase.from('reports').insert([{
         id: reportId, client_id: selId, report_type: reportTypeId,
         report_label: rtype.label, report_category: rtype.cat,
         deck_types: rtype.deckTypes, file_name: file.name, storage_path: storagePath,
       }]).select().single();
+      if (dbErr) {
+        console.error('DB error:', dbErr);
+        throw new Error(`DB: ${dbErr.message}`);
+      }
       return data || null;
     };
 
