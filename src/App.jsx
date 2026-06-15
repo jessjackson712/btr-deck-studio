@@ -753,19 +753,51 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
       setLocalUploadType(null);
     };
 
-    const save = async () => {
-      setSaving(true);
-      const dtype = DECK_TYPES.find(d=>d.id===form.deck_type);
-      const title = form.title || `${dtype?.label} — ${client?.name} — ${new Date().toLocaleDateString('en-US',{month:'short',year:'numeric'})}`;
-      const { data } = await supabase.from('deck_requests').insert([{ ...form, title, client_id:selId, report_ids:selReports, transcript_ids:selTranscripts, status:'pending' }]).select().single();
-      if (data) {
-        setClientRequests(prev=>[data,...prev]);
-        setSelectedRequest(data);
-        setActiveTab('requests');
-        setScreen('request-detail');
-      }
-      setSaving(false);
-    };
+   const save = async () => {
+  setSaving(true);
+  const dtype = DECK_TYPES.find(d => d.id === form.deck_type);
+  const title = form.title || `${dtype?.label} — ${client?.name} — ${new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
+
+  const { data } = await supabase.from('deck_requests').insert([{
+    ...form, title, client_id: selId,
+    report_ids: selReports, transcript_ids: selTranscripts, status: 'pending'
+  }]).select().single();
+
+  if (data) {
+    setClientRequests(prev => [data, ...prev]);
+    setSelectedRequest(data);
+
+    // Fire Slack notification (non-blocking — don't let a Slack failure stop the save)
+    try {
+      const attachedReportLabels = clientReports
+        .filter(r => selReports.includes(r.id))
+        .map(r => r.report_label);
+
+      await fetch('/api/slack-notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestId: data.id,
+          clientName: client?.name,
+          clientType: client?.type,
+          deckTypeLabel: dtype?.label,
+          deckTypeIcon: dtype?.icon,
+          requestedBy: form.requested_by,
+          dueDate: form.due_date,
+          specialInstructions: form.special_instructions,
+          reportLabels: attachedReportLabels,
+          transcriptCount: selTranscripts.length,
+        })
+      });
+    } catch (err) {
+      console.error('Slack notify failed (non-fatal):', err);
+    }
+
+    setActiveTab('requests');
+    setScreen('request-detail');
+  }
+  setSaving(false);
+};
 
     return (
       <div style={{ maxWidth:760 }}>
