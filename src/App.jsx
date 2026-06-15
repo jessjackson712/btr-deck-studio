@@ -731,18 +731,40 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
     const [selReports,setSelReports]=useState([]);
     const [selTranscripts,setSelTranscripts]=useState([]);
     const [saving,setSaving]=useState(false);
-    // ── FIX: use ref instead of state to avoid stale closure on file input onChange ──
+    // Local uploads: tracked here only so parent state never re-renders and unmounts this component
+    const [localReports,setLocalReports]=useState([]);
     const localUploadTypeRef = useRef(null);
     const localReportRef = useRef(null);
+
+    const allReports = [...localReports, ...clientReports];
 
     const relevant = reportsForDeckType(form.deck_type);
     const catGroups = relevant.reduce((acc,r)=>{ (acc[r.cat]=acc[r.cat]||[]).push(r); return acc; },{});
 
+    // Upload without touching parent clientReports state (prevents unmount/remount of this component)
+    const uploadReportLocally = async (file, reportTypeId) => {
+      const rtype = REPORT_TYPES.find(r => r.id === reportTypeId);
+      const reportId = crypto.randomUUID();
+      const ext = file.name.split('.').pop();
+      const storagePath = `${selId}/reports/${reportId}.${ext}`;
+      const { error: storageErr } = await supabase.storage.from('client-files').upload(storagePath, file, { upsert:true });
+      if (storageErr) { console.error(storageErr); return null; }
+      const { data } = await supabase.from('reports').insert([{
+        id: reportId, client_id: selId, report_type: reportTypeId,
+        report_label: rtype.label, report_category: rtype.cat,
+        deck_types: rtype.deckTypes, file_name: file.name, storage_path: storagePath,
+      }]).select().single();
+      return data || null;
+    };
+
     const handleLocalReport = async (e) => {
       const file = e.target.files[0]; e.target.value = '';
       if (!file || !localUploadTypeRef.current) return;
-      const saved = await uploadReportFile(file, localUploadTypeRef.current);
-      if (saved) setSelReports(prev => [...prev.filter(id => id !== saved.id), saved.id]);
+      const saved = await uploadReportLocally(file, localUploadTypeRef.current);
+      if (saved) {
+        setLocalReports(prev => [saved, ...prev]);
+        setSelReports(prev => [...prev.filter(id => id !== saved.id), saved.id]);
+      }
       localUploadTypeRef.current = null;
     };
 
@@ -762,7 +784,7 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
 
         // Fire Slack notification (non-blocking)
         try {
-          const attachedReportLabels = clientReports
+          const attachedReportLabels = allReports
             .filter(r => selReports.includes(r.id))
             .map(r => r.report_label);
 
@@ -824,7 +846,7 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(250px,1fr))', gap:8 }}>
                 {rpts.map(rt=>{
-                  const existing = clientReports.filter(r=>r.report_type===rt.id);
+                  const existing = allReports.filter(r=>r.report_type===rt.id);
                   const anySelected = existing.some(r=>selReports.includes(r.id));
                   return (
                     <div key={rt.id} style={{ background:C.surface, border:`1px solid ${anySelected?C.success:C.border}`, borderRadius:8, padding:'10px 12px' }}>
