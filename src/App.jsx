@@ -105,19 +105,15 @@ export default function BTRDeckStudio() {
   const [styleRefs, setStyleRefs] = useState([]);
   const [loadingStyleRefs, setLoadingStyleRefs] = useState(true);
   const [processingStyleRef, setProcessingStyleRef] = useState(false);
-  // Client file data
   const [clientReports, setClientReports] = useState([]);
   const [clientTranscripts, setClientTranscripts] = useState([]);
   const [clientDecks, setClientDecks] = useState([]);
   const [clientRequests, setClientRequests] = useState([]);
   const [clientNotes, setClientNotes] = useState([]);
   const [loadingClientData, setLoadingClientData] = useState(false);
-  // Selected request for detail view
   const [selectedRequest, setSelectedRequest] = useState(null);
-  // Upload states
   const [uploadingReportType, setUploadingReportType] = useState(null);
   const [uploadingDeck, setUploadingDeck] = useState(false);
-  // Briefing
   const [briefingCopied, setBriefingCopied] = useState(false);
 
   const reportFileRef = useRef(null);
@@ -168,7 +164,7 @@ export default function BTRDeckStudio() {
     loadClientData(id);
   };
 
-  // ── FILE UPLOADS ────────────────────────────────────────────────────────────
+  // ── FILE UPLOADS ─────────────────────────────────────────────────────────────
 
   const uploadReportFile = async (file, reportTypeId) => {
     const rtype = REPORT_TYPES.find(r => r.id === reportTypeId);
@@ -373,7 +369,7 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
     setStyleRefs(prev=>prev.filter(r=>r.id!==id));
   };
 
-  // ── SCREENS ─────────────────────────────────────────────────────────────────
+  // ── SCREENS ──────────────────────────────────────────────────────────────────
 
   const Clients = () => (
     <div>
@@ -441,11 +437,9 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
       { id:'decks', label:`Decks${clientDecks.length>0?` (${clientDecks.length})`:''}` },
       { id:'notes', label:'Notes' },
     ];
-
     return (
       <div>
         <button style={{ ...btn('outline'), marginBottom:18 }} onClick={()=>setScreen('clients')}>← All Clients</button>
-        {/* Header */}
         <div style={{ ...st.card, marginBottom:0, borderRadius:'12px 12px 0 0', borderBottom:`1px solid ${C.border}` }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
             <div>
@@ -456,16 +450,14 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
                 {client.categories&&<span style={{ fontSize:12, color:C.faint }}>📦 {client.categories}</span>}
               </div>
             </div>
-            <button style={btn('primary')} onClick={()=>{ setScreen('new-request'); }}>+ New Deck Request</button>
+            <button style={btn('primary')} onClick={()=>setScreen('new-request')}>+ New Deck Request</button>
           </div>
         </div>
-        {/* Tabs */}
         <div style={{ background:C.card, borderLeft:`1px solid ${C.border}`, borderRight:`1px solid ${C.border}`, display:'flex', overflowX:'auto', borderBottom:`1px solid ${C.border}` }}>
           {tabs.map(t=>(
             <div key={t.id} style={{ ...st.tab, color:activeTab===t.id?C.accent:C.muted, borderBottomColor:activeTab===t.id?C.accent:'transparent', fontWeight:activeTab===t.id?700:500 }} onClick={()=>setActiveTab(t.id)}>{t.label}</div>
           ))}
         </div>
-        {/* Tab Content */}
         <div style={{ ...st.card, borderRadius:'0 0 12px 12px', borderTop:'none' }}>
           {loadingClientData&&activeTab!=='overview'?<div style={{ textAlign:'center', padding:'40px', color:C.faint }}>Loading…</div>:null}
           {activeTab==='overview'&&<OverviewTab />}
@@ -739,65 +731,66 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
     const [selReports,setSelReports]=useState([]);
     const [selTranscripts,setSelTranscripts]=useState([]);
     const [saving,setSaving]=useState(false);
-    const [localUploadType,setLocalUploadType]=useState(null);
-    const localReportRef=useRef(null);
+    // ── FIX: use ref instead of state to avoid stale closure on file input onChange ──
+    const localUploadTypeRef = useRef(null);
+    const localReportRef = useRef(null);
 
     const relevant = reportsForDeckType(form.deck_type);
     const catGroups = relevant.reduce((acc,r)=>{ (acc[r.cat]=acc[r.cat]||[]).push(r); return acc; },{});
 
     const handleLocalReport = async (e) => {
-      const file = e.target.files[0]; e.target.value='';
-      if (!file || !localUploadType) return;
-      const saved = await uploadReportFile(file, localUploadType);
-      if (saved) setSelReports(prev=>[...prev.filter(id=>id!==saved.id), saved.id]);
-      setLocalUploadType(null);
+      const file = e.target.files[0]; e.target.value = '';
+      if (!file || !localUploadTypeRef.current) return;
+      const saved = await uploadReportFile(file, localUploadTypeRef.current);
+      if (saved) setSelReports(prev => [...prev.filter(id => id !== saved.id), saved.id]);
+      localUploadTypeRef.current = null;
     };
 
-   const save = async () => {
-  setSaving(true);
-  const dtype = DECK_TYPES.find(d => d.id === form.deck_type);
-  const title = form.title || `${dtype?.label} — ${client?.name} — ${new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
+    const save = async () => {
+      setSaving(true);
+      const dtype = DECK_TYPES.find(d => d.id === form.deck_type);
+      const title = form.title || `${dtype?.label} — ${client?.name} — ${new Date().toLocaleDateString('en-US', { month:'short', year:'numeric' })}`;
 
-  const { data } = await supabase.from('deck_requests').insert([{
-    ...form, title, client_id: selId,
-    report_ids: selReports, transcript_ids: selTranscripts, status: 'pending'
-  }]).select().single();
+      const { data } = await supabase.from('deck_requests').insert([{
+        ...form, title, client_id: selId,
+        report_ids: selReports, transcript_ids: selTranscripts, status: 'pending'
+      }]).select().single();
 
-  if (data) {
-    setClientRequests(prev => [data, ...prev]);
-    setSelectedRequest(data);
+      if (data) {
+        setClientRequests(prev => [data, ...prev]);
+        setSelectedRequest(data);
 
-    // Fire Slack notification (non-blocking — don't let a Slack failure stop the save)
-    try {
-      const attachedReportLabels = clientReports
-        .filter(r => selReports.includes(r.id))
-        .map(r => r.report_label);
+        // Fire Slack notification (non-blocking)
+        try {
+          const attachedReportLabels = clientReports
+            .filter(r => selReports.includes(r.id))
+            .map(r => r.report_label);
 
-      await fetch('/api/slack-notify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          requestId: data.id,
-          clientName: client?.name,
-          clientType: client?.type,
-          deckTypeLabel: dtype?.label,
-          deckTypeIcon: dtype?.icon,
-          requestedBy: form.requested_by,
-          dueDate: form.due_date,
-          specialInstructions: form.special_instructions,
-          reportLabels: attachedReportLabels,
-          transcriptCount: selTranscripts.length,
-        })
-      });
-    } catch (err) {
-      console.error('Slack notify failed (non-fatal):', err);
-    }
+          await fetch('/api/slack-notify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              requestId: data.id,
+              clientName: client?.name,
+              clientType: client?.type,
+              deckTypeLabel: dtype?.label,
+              deckTypeIcon: dtype?.icon,
+              requestedBy: form.requested_by,
+              dueDate: form.due_date,
+              specialInstructions: form.special_instructions,
+              reportLabels: attachedReportLabels,
+              transcriptCount: selTranscripts.length,
+            })
+          });
+        } catch (err) {
+          console.error('Slack notify failed (non-fatal):', err);
+        }
 
-    setActiveTab('requests');
-    setScreen('request-detail');
-  }
-  setSaving(false);
-};
+        setActiveTab('requests');
+        setScreen('request-detail');
+      }
+      setSaving(false);
+    };
 
     return (
       <div style={{ maxWidth:760 }}>
@@ -844,9 +837,9 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
                           </div>
                         ))
                       ):(
-                        <button style={{ ...btn('sm'), width:'100%', background:'transparent', border:`1px solid ${C.border}`, color:C.muted, fontSize:11 }} onClick={()=>{ setLocalUploadType(rt.id); localReportRef.current?.click(); }}>⬆ Upload</button>
+                        <button style={{ ...btn('sm'), width:'100%', background:'transparent', border:`1px solid ${C.border}`, color:C.muted, fontSize:11 }} onClick={()=>{ localUploadTypeRef.current = rt.id; localReportRef.current?.click(); }}>⬆ Upload</button>
                       )}
-                      {existing.length>0&&<button style={{ ...btn('sm'), fontSize:10, marginTop:4, background:'transparent', border:`1px solid ${C.border}`, color:C.faint }} onClick={()=>{ setLocalUploadType(rt.id); localReportRef.current?.click(); }}>+ New version</button>}
+                      {existing.length>0&&<button style={{ ...btn('sm'), fontSize:10, marginTop:4, background:'transparent', border:`1px solid ${C.border}`, color:C.faint }} onClick={()=>{ localUploadTypeRef.current = rt.id; localReportRef.current?.click(); }}>+ New version</button>}
                     </div>
                   );
                 })}
@@ -929,23 +922,19 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
           </div>
         </div>
 
-        {/* Prepare for Claude */}
         <div style={{ ...st.card, borderTop:`3px solid ${C.accent}`, marginBottom:16 }}>
           <div style={{ fontSize:15, fontWeight:700, marginBottom:6 }}>🚀 Prepare for Claude</div>
           <div style={{ fontSize:13, color:C.muted, lineHeight:1.6, marginBottom:16 }}>
             Copies a complete briefing to your clipboard — client context, goals, transcripts, and report list. Open your Claude Project, paste this briefing, then upload the report files below. Claude will read every report in full and build the deck.
           </div>
-          <div style={{ display:'flex', gap:10 }}>
-            <button style={{ ...btn('primary'), opacity:briefingCopied?0.5:1 }} onClick={()=>generateBriefing(req)}>
-              {briefingCopied?'✓ Copied to Clipboard!':'📋 Copy Briefing for Claude'}
-            </button>
-          </div>
+          <button style={{ ...btn('primary'), opacity:briefingCopied?0.5:1 }} onClick={()=>generateBriefing(req)}>
+            {briefingCopied?'✓ Copied to Clipboard!':'📋 Copy Briefing for Claude'}
+          </button>
           {briefingCopied&&<div style={{ marginTop:12, padding:'10px 14px', background:'#0F2A1D', border:'1px solid #059669', borderRadius:8, fontSize:12, color:C.success }}>
             Briefing copied! Now: 1) Open your Claude Project 2) Paste the briefing 3) Upload the report files below 4) Claude builds the deck
           </div>}
         </div>
 
-        {/* Report Downloads */}
         {attachedReports.length>0&&(
           <div style={{ ...st.card, marginBottom:16 }}>
             <div style={{ fontSize:14, fontWeight:700, marginBottom:12 }}>📁 Report Files to Upload to Claude</div>
@@ -964,7 +953,6 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
           </div>
         )}
 
-        {/* Transcripts summary */}
         {attachedTranscripts.length>0&&(
           <div style={{ ...st.card, marginBottom:16 }}>
             <div style={{ fontSize:14, fontWeight:700, marginBottom:12 }}>📝 Transcripts Included</div>
@@ -985,7 +973,6 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
           </div>
         )}
 
-        {/* Upload finished deck */}
         <div style={{ ...st.card, borderTop:`3px solid ${C.success}` }}>
           <div style={{ fontSize:14, fontWeight:700, marginBottom:6 }}>✅ Upload Finished Deck</div>
           <div style={{ fontSize:13, color:C.muted, marginBottom:14 }}>When the deck is done, upload it here. It'll be saved to {client?.name}'s permanent file and this request will be marked complete.</div>
