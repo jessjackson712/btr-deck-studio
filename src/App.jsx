@@ -731,8 +731,9 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
     const [selReports,setSelReports]=useState([]);
     const [selTranscripts,setSelTranscripts]=useState([]);
     const [saving,setSaving]=useState(false);
-    // Local uploads: tracked here only so parent state never re-renders and unmounts this component
     const [localReports,setLocalReports]=useState([]);
+    const [uploadingLocal,setUploadingLocal]=useState(null);
+    const [uploadError,setUploadError]=useState(null);
     const localUploadTypeRef = useRef(null);
     const localReportRef = useRef(null);
 
@@ -759,13 +760,24 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
 
     const handleLocalReport = async (e) => {
       const file = e.target.files[0]; e.target.value = '';
-      if (!file || !localUploadTypeRef.current) return;
-      const saved = await uploadReportLocally(file, localUploadTypeRef.current);
-      if (saved) {
-        setLocalReports(prev => [saved, ...prev]);
-        setSelReports(prev => [...prev.filter(id => id !== saved.id), saved.id]);
-      }
+      const typeId = localUploadTypeRef.current;
       localUploadTypeRef.current = null;
+      if (!file || !typeId) { console.warn('handleLocalReport: missing file or typeId', { file: !!file, typeId }); return; }
+      setUploadingLocal(typeId);
+      setUploadError(null);
+      try {
+        const saved = await uploadReportLocally(file, typeId);
+        if (saved) {
+          setLocalReports(prev => [saved, ...prev]);
+          setSelReports(prev => [...prev.filter(id => id !== saved.id), saved.id]);
+        } else {
+          setUploadError('Upload failed — check Supabase storage permissions.');
+        }
+      } catch(err) {
+        console.error('Upload error:', err);
+        setUploadError(err.message || 'Unknown upload error');
+      }
+      setUploadingLocal(null);
     };
 
     const save = async () => {
@@ -838,6 +850,7 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
         <div style={{ ...st.card, marginBottom:16 }}>
           <div style={{ fontSize:14, fontWeight:700, marginBottom:6 }}>2. Reports</div>
           <div style={{ fontSize:13, color:C.muted, marginBottom:16 }}>Select reports to include. Upload new ones or use existing files from this client's folder. All optional.</div>
+          {uploadError&&<div style={{ marginBottom:12, padding:'8px 12px', background:'#2D0A0A', border:'1px solid #EF4444', borderRadius:8, fontSize:12, color:C.error }}>⚠️ {uploadError}</div>}
           {Object.entries(catGroups).map(([cat,rpts])=>(
             <div key={cat} style={{ marginBottom:16 }}>
               <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
@@ -848,6 +861,7 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
                 {rpts.map(rt=>{
                   const existing = allReports.filter(r=>r.report_type===rt.id);
                   const anySelected = existing.some(r=>selReports.includes(r.id));
+                  const isUploading = uploadingLocal === rt.id;
                   return (
                     <div key={rt.id} style={{ background:C.surface, border:`1px solid ${anySelected?C.success:C.border}`, borderRadius:8, padding:'10px 12px' }}>
                       <div style={{ fontSize:12, fontWeight:600, color:C.text, marginBottom:6 }}>{rt.label}</div>
@@ -859,9 +873,13 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
                           </div>
                         ))
                       ):(
-                        <button style={{ ...btn('sm'), width:'100%', background:'transparent', border:`1px solid ${C.border}`, color:C.muted, fontSize:11 }} onClick={()=>{ localUploadTypeRef.current = rt.id; localReportRef.current?.click(); }}>⬆ Upload</button>
+                        <button style={{ ...btn('sm'), width:'100%', background:'transparent', border:`1px solid ${C.border}`, color:isUploading?C.accent:C.muted, fontSize:11, opacity:isUploading?0.7:1 }} onClick={()=>{ localUploadTypeRef.current = rt.id; localReportRef.current?.click(); }} disabled={isUploading}>
+                          {isUploading ? '⏳ Uploading…' : '⬆ Upload'}
+                        </button>
                       )}
-                      {existing.length>0&&<button style={{ ...btn('sm'), fontSize:10, marginTop:4, background:'transparent', border:`1px solid ${C.border}`, color:C.faint }} onClick={()=>{ localUploadTypeRef.current = rt.id; localReportRef.current?.click(); }}>+ New version</button>}
+                      {existing.length>0&&<button style={{ ...btn('sm'), fontSize:10, marginTop:4, background:'transparent', border:`1px solid ${C.border}`, color:C.faint, opacity:isUploading?0.7:1 }} onClick={()=>{ localUploadTypeRef.current = rt.id; localReportRef.current?.click(); }} disabled={isUploading}>
+                        {isUploading ? '⏳' : '+ New version'}
+                      </button>}
                     </div>
                   );
                 })}
