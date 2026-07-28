@@ -93,6 +93,15 @@ const CAT_COLORS = {
 
 const BTR_SYSTEM_PROMPT = `You are acting as a senior retail media strategist at BTR Media. Analyze decks and create reusable style guides for future deck building.`;
 
+// Claude.ai (chat + Projects) rejects any single file over 30MB, so a report
+// that's too big to ever be uploaded to the Claude Project is useless in this
+// pipeline. We block oversized uploads client-side instead of letting them
+// fail (or worse, silently sit in storage unusable) later.
+const CLAUDE_FILE_LIMIT_BYTES = 30 * 1024 * 1024; // 30MB
+const formatBytes = (bytes) => bytes >= 1024*1024 ? `${(bytes/(1024*1024)).toFixed(1)}MB` : `${Math.round(bytes/1024)}KB`;
+const tooBigForClaude = (file) => file.size > CLAUDE_FILE_LIMIT_BYTES;
+const claudeSizeWarning = (file) => `"${file.name}" is ${formatBytes(file.size)}, which is over Claude's 30MB per-file upload limit. It can be stored here, but you won't be able to attach it to your Claude Project later. Trim the date range or columns in the export (or split it into smaller files) and re-upload.`;
+
 const reportsForDeckType = (deckType) =>
   REPORT_TYPES.filter(r => r.deckTypes.includes('all') || r.deckTypes.includes(deckType));
 
@@ -115,6 +124,7 @@ export default function BTRDeckStudio() {
   const [uploadingReportType, setUploadingReportType] = useState(null);
   const [uploadingDeck, setUploadingDeck] = useState(false);
   const [briefingCopied, setBriefingCopied] = useState(false);
+  const [reportSizeError, setReportSizeError] = useState(null);
 
   const reportFileRef = useRef(null);
   const transcriptFileRef = useRef(null);
@@ -190,6 +200,12 @@ export default function BTRDeckStudio() {
   const handleReportFile = async (e) => {
     const file = e.target.files[0]; e.target.value = '';
     if (!file || !pendingUploadRef.current) return;
+    if (tooBigForClaude(file)) {
+      setReportSizeError(claudeSizeWarning(file));
+      pendingUploadRef.current = null;
+      return;
+    }
+    setReportSizeError(null);
     setUploadingReportType(pendingUploadRef.current);
     await uploadReportFile(file, pendingUploadRef.current);
     setUploadingReportType(null);
@@ -223,6 +239,10 @@ export default function BTRDeckStudio() {
   const handleTranscriptFile = async (e) => {
     const file = e.target.files[0]; e.target.value = '';
     if (!file) return;
+    if (tooBigForClaude(file)) {
+      setReportSizeError(claudeSizeWarning(file));
+      return;
+    }
     await uploadTranscript(file);
   };
 
@@ -531,6 +551,12 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
           <div style={{ fontSize:15, fontWeight:700 }}>Reports</div>
           <div style={{ fontSize:12, color:C.muted }}>{clientReports.length} file{clientReports.length!==1?'s':''} stored</div>
         </div>
+        {reportSizeError&&(
+          <div style={{ marginBottom:16, padding:'10px 14px', background:'#2D0A0A', border:'1px solid #EF4444', borderRadius:8, fontSize:12, color:C.error, display:'flex', justifyContent:'space-between', gap:12 }}>
+            <span>⚠️ {reportSizeError}</span>
+            <span style={{ cursor:'pointer', flexShrink:0 }} onClick={()=>setReportSizeError(null)}>✕</span>
+          </div>
+        )}
         <input ref={reportFileRef} type="file" accept=".csv,.xlsx,.xls,.txt,.tsv" style={{ display:'none' }} onChange={handleReportFile} />
         {Object.entries(catGroups).map(([cat,rpts])=>(
           <div key={cat} style={{ marginBottom:20 }}>
@@ -580,6 +606,12 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
           <div style={{ fontSize:15, fontWeight:700 }}>Transcripts</div>
           <button style={btn('primary')} onClick={()=>transcriptFileRef.current?.click()}>+ Upload Transcript</button>
         </div>
+        {reportSizeError&&(
+          <div style={{ marginBottom:16, padding:'10px 14px', background:'#2D0A0A', border:'1px solid #EF4444', borderRadius:8, fontSize:12, color:C.error, display:'flex', justifyContent:'space-between', gap:12 }}>
+            <span>⚠️ {reportSizeError}</span>
+            <span style={{ cursor:'pointer', flexShrink:0 }} onClick={()=>setReportSizeError(null)}>✕</span>
+          </div>
+        )}
         <input ref={transcriptFileRef} type="file" accept=".txt,.doc,.docx" style={{ display:'none' }} onChange={handleTranscriptFile} />
         {clientTranscripts.length===0?(
           <div style={{ textAlign:'center', padding:'40px', color:C.faint }}>
@@ -770,6 +802,10 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
       const typeId = localUploadTypeRef.current;
       localUploadTypeRef.current = null;
       if (!file || !typeId) { console.warn('handleLocalReport: missing file or typeId', { file: !!file, typeId }); return; }
+      if (tooBigForClaude(file)) {
+        setUploadError(claudeSizeWarning(file));
+        return;
+      }
       setUploadingLocal(typeId);
       setUploadError(null);
       try {
