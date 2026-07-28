@@ -65,9 +65,9 @@ const REPORT_TYPES = [
   { id:'sp_advertised', label:'SP Advertised Product', cat:'Sponsored Products', deckTypes:['all'] },
   { id:'sp_search_term', label:'SP Search Term Report', cat:'Sponsored Products', deckTypes:['all'] },
   { id:'sqr', label:'SQR (Search Query Report)', cat:'Sponsored Products', deckTypes:['all'] },
-  { id:'beta_product', label:'Beta Report by Product', cat:'DSP / Beta', deckTypes:['all'] },
-  { id:'beta_target', label:'Beta Report by Target', cat:'DSP / Beta', deckTypes:['all'] },
-  { id:'beta_campaign', label:'Beta Report by Campaign', cat:'DSP / Beta', deckTypes:['all'] },
+  { id:'ads_perf_1', label:'Ads Performance Report — Part 1', cat:'Ads Performance Report', deckTypes:['all'] },
+  { id:'ads_perf_2', label:'Ads Performance Report — Part 2', cat:'Ads Performance Report', deckTypes:['all'] },
+  { id:'ads_perf_3', label:'Ads Performance Report — Part 3', cat:'Ads Performance Report', deckTypes:['all'] },
   { id:'sc_sales_asin', label:'SC Total Sales by ASIN', cat:'Seller Central', deckTypes:['all'] },
   { id:'amc_impression_freq', label:'AMC: Impression Frequency', cat:'AMC', deckTypes:['all'] },
   { id:'amc_kw_purchase_path', label:'AMC: Keyword Purchase Path', cat:'AMC', deckTypes:['all'] },
@@ -77,18 +77,16 @@ const REPORT_TYPES = [
   { id:'ss_market', label:'SmartScout: Market Share', cat:'SmartScout', deckTypes:['all'] },
   { id:'ss_products', label:'SmartScout: Products', cat:'SmartScout', deckTypes:['all'] },
   { id:'ss_brand', label:'SmartScout: Brand Monthly', cat:'SmartScout', deckTypes:['all'] },
-  { id:'q1_last_year', label:'Q1 Last Year', cat:'Period Comparison', deckTypes:['qbr','sales','custom'] },
-  { id:'q1_this_year', label:'Q1 This Year', cat:'Period Comparison', deckTypes:['qbr','sales','custom'] },
-  { id:'mom_this_month', label:'MoM: This Month', cat:'Month over Month', deckTypes:['monthly','sales'] },
-  { id:'mom_last_month', label:'MoM: Last Month', cat:'Month over Month', deckTypes:['monthly','sales'] },
+  { id:'q1_last_year', label:'Last Year', cat:'SQR Period Comparison', deckTypes:['qbr','sales','custom'] },
+  { id:'q1_this_year', label:'This Year', cat:'SQR Period Comparison', deckTypes:['qbr','sales','custom'] },
   { id:'yoy_this_year', label:'YoY: This Year', cat:'Year over Year', deckTypes:['annual','sales'] },
   { id:'yoy_last_year', label:'YoY: Last Year', cat:'Year over Year', deckTypes:['annual','sales'] },
 ];
 
 const CAT_COLORS = {
-  'Sponsored Brands':'#3B82F6','Sponsored Products':'#8B5CF6','DSP / Beta':'#F97316',
+  'Sponsored Brands':'#3B82F6','Sponsored Products':'#8B5CF6','Ads Performance Report':'#F97316',
   'Seller Central':'#10B981','AMC':'#EC4899','SmartScout':'#F59E0B',
-  'Period Comparison':'#84CC16','Month over Month':'#06B6D4','Year over Year':'#A78BFA',
+  'SQR Period Comparison':'#84CC16','Year over Year':'#A78BFA',
 };
 
 const BTR_SYSTEM_PROMPT = `You are acting as a senior retail media strategist at BTR Media. Analyze decks and create reusable style guides for future deck building.`;
