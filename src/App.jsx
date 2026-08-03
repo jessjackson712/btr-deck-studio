@@ -69,6 +69,7 @@ const REPORT_TYPES = [
   { id:'ads_perf_2', label:'Ads Performance Report — Part 2', cat:'Ads Performance Report', deckTypes:['all'] },
   { id:'ads_perf_3', label:'Ads Performance Report — Part 3', cat:'Ads Performance Report', deckTypes:['all'] },
   { id:'sc_sales_asin', label:'SC Total Sales by ASIN', cat:'Seller Central', deckTypes:['all'] },
+  { id:'vc_sales_asin', label:'VC Total Sales by ASIN', cat:'Vendor Central', deckTypes:['all'] },
   { id:'amc_impression_freq', label:'AMC: Impression Frequency', cat:'AMC', deckTypes:['all'] },
   { id:'amc_kw_purchase_path', label:'AMC: Keyword Purchase Path', cat:'AMC', deckTypes:['all'] },
   { id:'amc_ad_placement', label:'AMC: Ad Placement Effectiveness', cat:'AMC', deckTypes:['all'] },
@@ -85,7 +86,7 @@ const REPORT_TYPES = [
 
 const CAT_COLORS = {
   'Sponsored Brands':'#3B82F6','Sponsored Products':'#8B5CF6','Ads Performance Report':'#F97316',
-  'Seller Central':'#10B981','AMC':'#EC4899','SmartScout':'#F59E0B',
+  'Seller Central':'#10B981','Vendor Central':'#14B8A6','AMC':'#EC4899','SmartScout':'#F59E0B',
   'SQR Period Comparison':'#84CC16','Year over Year':'#A78BFA',
 };
 
@@ -196,18 +197,27 @@ export default function BTRDeckStudio() {
   };
 
   const handleReportFile = async (e) => {
-    const file = e.target.files[0]; e.target.value = '';
-    if (!file || !pendingUploadRef.current) return;
-    if (tooBigForClaude(file)) {
-      setReportSizeError(claudeSizeWarning(file));
-      pendingUploadRef.current = null;
-      return;
-    }
-    setReportSizeError(null);
-    setUploadingReportType(pendingUploadRef.current);
-    await uploadReportFile(file, pendingUploadRef.current);
-    setUploadingReportType(null);
+    const files = Array.from(e.target.files || []); e.target.value = '';
+    const typeId = pendingUploadRef.current;
     pendingUploadRef.current = null;
+    if (files.length === 0 || !typeId) return;
+
+    // Any report type can hold any number of files. Oversized files are
+    // skipped individually so one bad file doesn't abort the whole batch.
+    const oversized = files.filter(tooBigForClaude);
+    const ok = files.filter(f => !tooBigForClaude(f));
+
+    setReportSizeError(oversized.length > 0
+      ? `Skipped ${oversized.length} file(s) over Claude's 30MB limit: ${oversized.map(f=>f.name).join(', ')}. Trim the date range or split the export and re-upload.`
+      : null);
+
+    if (ok.length === 0) return;
+
+    setUploadingReportType(typeId);
+    for (const file of ok) {
+      await uploadReportFile(file, typeId);
+    }
+    setUploadingReportType(null);
   };
 
   const triggerReportUpload = (typeId) => {
@@ -547,7 +557,7 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
       <div>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
           <div style={{ fontSize:15, fontWeight:700 }}>Reports</div>
-          <div style={{ fontSize:12, color:C.muted }}>{clientReports.length} file{clientReports.length!==1?'s':''} stored</div>
+          <div style={{ fontSize:12, color:C.muted }}>{clientReports.length} file{clientReports.length!==1?'s':''} stored · select multiple files at once for any report type</div>
         </div>
         {reportSizeError&&(
           <div style={{ marginBottom:16, padding:'10px 14px', background:'#2D0A0A', border:'1px solid #EF4444', borderRadius:8, fontSize:12, color:C.error, display:'flex', justifyContent:'space-between', gap:12 }}>
@@ -555,7 +565,7 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
             <span style={{ cursor:'pointer', flexShrink:0 }} onClick={()=>setReportSizeError(null)}>✕</span>
           </div>
         )}
-        <input ref={reportFileRef} type="file" accept=".csv,.xlsx,.xls,.txt,.tsv" style={{ display:'none' }} onChange={handleReportFile} />
+        <input ref={reportFileRef} type="file" multiple accept=".csv,.xlsx,.xls,.txt,.tsv" style={{ display:'none' }} onChange={handleReportFile} />
         {Object.entries(catGroups).map(([cat,rpts])=>(
           <div key={cat} style={{ marginBottom:20 }}>
             <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
@@ -796,32 +806,50 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
     };
 
     const handleLocalReport = async (e) => {
-      const file = e.target.files[0]; e.target.value = '';
+      const files = Array.from(e.target.files || []); e.target.value = '';
       const typeId = localUploadTypeRef.current;
       localUploadTypeRef.current = null;
-      if (!file || !typeId) { console.warn('handleLocalReport: missing file or typeId', { file: !!file, typeId }); return; }
-      if (tooBigForClaude(file)) {
-        setUploadError(claudeSizeWarning(file));
-        return;
-      }
+      if (files.length === 0 || !typeId) { console.warn('handleLocalReport: missing files or typeId', { count: files.length, typeId }); return; }
+
+      const oversized = files.filter(tooBigForClaude);
+      const ok = files.filter(f => !tooBigForClaude(f));
+
+      setUploadError(oversized.length > 0
+        ? `Skipped ${oversized.length} file(s) over Claude's 30MB limit: ${oversized.map(f=>f.name).join(', ')}.`
+        : null);
+
+      if (ok.length === 0) return;
+
       setUploadingLocal(typeId);
-      setUploadError(null);
-      try {
-        const saved = await uploadReportLocally(file, typeId);
-        if (saved) {
-          setLocalReports(prev => [saved, ...prev]);
-          setSelReports(prev => [...prev.filter(id => id !== saved.id), saved.id]);
-        } else {
-          setUploadError('Upload failed — check Supabase storage permissions.');
+      const failures = [];
+      for (const file of ok) {
+        try {
+          const saved = await uploadReportLocally(file, typeId);
+          if (saved) {
+            setLocalReports(prev => [saved, ...prev]);
+            setSelReports(prev => [...prev.filter(id => id !== saved.id), saved.id]);
+          } else {
+            failures.push(file.name);
+          }
+        } catch(err) {
+          console.error('Upload error:', file.name, err);
+          failures.push(`${file.name} (${err.message})`);
         }
-      } catch(err) {
-        console.error('Upload error:', err);
-        setUploadError(err.message || 'Unknown upload error');
       }
+      if (failures.length > 0) setUploadError(`Failed to upload: ${failures.join(', ')}`);
       setUploadingLocal(null);
     };
 
     const save = async () => {
+      // Guard against the silent-empty-selection case: files exist for this
+      // client but none were checked, so the request and Slack notification
+      // would both report zero reports.
+      if (selReports.length === 0 && allReports.length > 0) {
+        const proceed = window.confirm(
+          `${allReports.length} file(s) are stored for ${client?.name}, but none are checked.\n\nCreate this request with no reports attached?`
+        );
+        if (!proceed) return;
+      }
       setSaving(true);
       const dtype = DECK_TYPES.find(d => d.id === form.deck_type);
       const title = form.title || `${dtype?.label} — ${client?.name} — ${new Date().toLocaleDateString('en-US', { month:'short', year:'numeric' })}`;
@@ -835,10 +863,12 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
         setClientRequests(prev => [data, ...prev]);
         setSelectedRequest(data);
 
-        // Fire Slack notification (non-blocking)
+        // Resolve labels from the persisted row rather than local selection
+        // state, so the Slack message always reflects what actually saved.
         try {
+          const savedIds = data.report_ids || [];
           const attachedReportLabels = allReports
-            .filter(r => selReports.includes(r.id))
+            .filter(r => savedIds.includes(r.id))
             .map(r => r.report_label);
 
           await fetch('/api/slack-notify', {
@@ -871,7 +901,7 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
       <div style={{ maxWidth:760 }}>
         <button style={{ ...btn('outline'), marginBottom:18 }} onClick={()=>{ setScreen('profile'); setActiveTab('requests'); }}>← Back to {client?.name}</button>
         <div style={{ fontSize:20, fontWeight:800, marginBottom:20 }}>New Deck Request</div>
-        <input ref={localReportRef} type="file" accept=".csv,.xlsx,.xls,.txt,.tsv" style={{ display:'none' }} onChange={handleLocalReport} />
+        <input ref={localReportRef} type="file" multiple accept=".csv,.xlsx,.xls,.txt,.tsv" style={{ display:'none' }} onChange={handleLocalReport} />
 
         {/* Step 1: Deck Type */}
         <div style={{ ...st.card, marginBottom:16 }}>
@@ -889,8 +919,13 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
 
         {/* Step 2: Reports */}
         <div style={{ ...st.card, marginBottom:16 }}>
-          <div style={{ fontSize:14, fontWeight:700, marginBottom:6 }}>2. Reports</div>
-          <div style={{ fontSize:13, color:C.muted, marginBottom:16 }}>Select reports to include. Upload new ones or use existing files from this client's folder. All optional.</div>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+            <div style={{ fontSize:14, fontWeight:700 }}>2. Reports</div>
+            <div style={{ fontSize:12, color:selReports.length>0?C.success:C.warn, fontWeight:600 }}>
+              {selReports.length} of {allReports.length} attached
+            </div>
+          </div>
+          <div style={{ fontSize:13, color:C.muted, marginBottom:16 }}>Check the box next to each file you want attached to this request. Files stored in this client's Reports tab are not attached automatically.</div>
           {uploadError&&<div style={{ marginBottom:12, padding:'8px 12px', background:'#2D0A0A', border:'1px solid #EF4444', borderRadius:8, fontSize:12, color:C.error }}>⚠️ {uploadError}</div>}
           {Object.entries(catGroups).map(([cat,rpts])=>(
             <div key={cat} style={{ marginBottom:16 }}>
@@ -919,7 +954,7 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
                         </button>
                       )}
                       {existing.length>0&&<button style={{ ...btn('sm'), fontSize:10, marginTop:4, background:'transparent', border:`1px solid ${C.border}`, color:C.faint, opacity:isUploading?0.7:1 }} onClick={()=>{ localUploadTypeRef.current = rt.id; localReportRef.current?.click(); }} disabled={isUploading}>
-                        {isUploading ? '⏳' : '+ New version'}
+                        {isUploading ? '⏳' : `+ Add more files (${existing.length})`}
                       </button>}
                     </div>
                   );
@@ -927,7 +962,13 @@ Rules: Use only numbers that appear in the uploaded report files. Never fabricat
               </div>
             </div>
           ))}
-          {selReports.length>0&&<div style={{ marginTop:12, padding:'8px 12px', background:'#0F2A1D', border:'1px solid #059669', borderRadius:8, fontSize:12, color:C.success }}>✓ {selReports.length} report{selReports.length!==1?'s':''} selected</div>}
+          {selReports.length>0?(
+            <div style={{ marginTop:12, padding:'8px 12px', background:'#0F2A1D', border:'1px solid #059669', borderRadius:8, fontSize:12, color:C.success }}>✓ {selReports.length} report{selReports.length!==1?'s':''} attached to this request</div>
+          ):allReports.length>0?(
+            <div style={{ marginTop:12, padding:'10px 12px', background:'#2A1F05', border:`1px solid ${C.warn}`, borderRadius:8, fontSize:12, color:C.warn, lineHeight:1.6 }}>
+              ⚠️ This client has {allReports.length} stored file{allReports.length!==1?'s':''}, but none are checked. The request and its Slack notification will show no reports attached.
+            </div>
+          ):null}
         </div>
 
         {/* Step 3: Transcripts */}
